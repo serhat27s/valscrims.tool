@@ -258,7 +258,7 @@ export const ValorantMapPicker = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-6 py-8 min-h-[calc(100vh-400px)]">
         <Tabs defaultValue="maps" className="space-y-8">
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 bg-card/80 border border-border h-12 p-1 relative overflow-hidden">
             <TabsTrigger

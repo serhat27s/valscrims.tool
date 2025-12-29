@@ -28,13 +28,16 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
   const [isSpinning, setIsSpinning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [assignedPlayers, setAssignedPlayers] = useState<Map<string, 1 | 2>>(new Map());
-  const spinIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [currentSpinDuration, setCurrentSpinDuration] = useState(3000); // Track current spin duration
+  const spinIntervalRef = useRef<number | null>(null);
 
-  // Side selection state
+  // Coin toss state
+  const [coinTossPhase, setCoinTossPhase] = useState<'choose' | 'flipping' | 'result' | 'complete' | null>(null);
+  const [team1Choice, setTeam1Choice] = useState<'heads' | 'tails' | null>(null);
+  const [coinResult, setCoinResult] = useState<'heads' | 'tails' | null>(null);
+  const [coinWinner, setCoinWinner] = useState<1 | 2 | null>(null);
+
   const [attackingTeam, setAttackingTeam] = useState<1 | 2 | null>(null);
-  const [isSideSpinning, setIsSideSpinning] = useState(false);
-  const [sideHighlight, setSideHighlight] = useState<1 | 2>(1);
-  const [sideDrawMode, setSideDrawMode] = useState<'attack' | 'defense'>('attack'); // New: which side to draw for
 
   const canAddMore = players.length < MAX_PLAYERS;
 
@@ -140,6 +143,7 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
 
   // Wheel spinning state
   const [wheelRotation, setWheelRotation] = useState(0);
+  const [wheelOpacity, setWheelOpacity] = useState(1); // For fade transitions
   const [currentSpinningPlayer, setCurrentSpinningPlayer] = useState<string | null>(null);
   const [unassignedPlayers, setUnassignedPlayers] = useState<string[]>([]);
   const isPausedRef = useRef(false);
@@ -186,37 +190,57 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
       setUnassignedPlayers(remainingPlayers);
 
       // Calculate how many full rotations + landing position
-      const fullRotations = 3 + Math.floor(Math.random() * 2); // 3-4 full spins
+      const fullRotations = 5 + Math.floor(Math.random() * 3); // 5-7 full spins for more drama
       const targetIndex = Math.floor(Math.random() * remainingPlayers.length);
       const segmentAngle = 360 / remainingPlayers.length;
 
-      // Offset to land in the CENTER of the segment (add half segment angle)
-      // Start from current wheel position to avoid lag
+      // Add random offset within 30-70% of segment to avoid edges but look random
+      const randomOffset = 0.3 + (Math.random() * 0.4); // Random between 0.3 and 0.7
       const startRotation = wheelRotation;
-      const additionalRotation = (fullRotations * 360) + (targetIndex * segmentAngle) + (segmentAngle / 2);
+      const additionalRotation = (fullRotations * 360) + (targetIndex * segmentAngle) + (segmentAngle * randomOffset);
       const targetRotation = startRotation + additionalRotation;
 
-      let currentRotation = startRotation;
-      const totalSteps = 40 + Math.floor(Math.random() * 20);
-      let step = 0;
+      // Random spin duration between 3-5 seconds
+      const spinDuration = 3000 + Math.floor(Math.random() * 2000);
 
-      const doSpin = () => {
-        step++;
-        const progress = step / totalSteps;
-        // Ease-out cubic for smooth deceleration
-        const easeOut = 1 - Math.pow(1 - progress, 3);
-        currentRotation = startRotation + (additionalRotation * easeOut);
+      // Set the spin duration and target rotation
+      setCurrentSpinDuration(spinDuration);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setWheelRotation(targetRotation);
+        });
+      });
 
-        setWheelRotation(currentRotation);
+      // Update highlighted player during spin
+      const startTime = Date.now();
 
-        // Calculate which player is at top (0 degrees) based on rotation
+      const updateHighlight = () => {
+        if (isPausedRef.current) {
+          // If paused, check again later
+          spinIntervalRef.current = setTimeout(updateHighlight, 50) as unknown as number;
+          return;
+        }
+
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / spinDuration, 1);
+
+        // Cubic bezier easing (0.17, 0.67, 0.12, 0.99) - similar to Wheel of Names
+        const easeOut = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+        const currentRotation = startRotation + (additionalRotation * easeOut);
+
+        // Calculate which player is at top
         const normalizedRotation = (360 - (currentRotation % 360)) % 360;
         const highlightIndex = Math.floor(normalizedRotation / segmentAngle) % remainingPlayers.length;
-        setCurrentSpinningPlayer(remainingPlayers[highlightIndex]);
+        // setCurrentSpinningPlayer(remainingPlayers[highlightIndex]); // Disabled - only CSS wheel spins
 
-        if (step >= totalSteps) {
-          // Final selection - the player at the top
-          const finalRotation = currentRotation % 360;
+        if (progress < 1) {
+          spinIntervalRef.current = setTimeout(updateHighlight, 50) as unknown as number;
+        } else {
+          // Spin complete - finalize selection
+          const finalRotation = targetRotation % 360;
           const finalNormalizedRotation = (360 - finalRotation) % 360;
           const finalIndex = Math.floor(finalNormalizedRotation / segmentAngle) % remainingPlayers.length;
           const player = remainingPlayers[finalIndex];
@@ -232,34 +256,45 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
 
           assigned.set(player, team);
           setAssignedPlayers(new Map(assigned));
-
           currentIndex++;
 
-          // Pause before next player spin - DON'T reset rotation to avoid lag
+          // Step 1: Show the selected player for 800ms
           setTimeout(() => {
-            setCurrentSpinningPlayer(null);
-            // Keep the current rotation, just continue from there
-            setTimeout(spinForPlayer, 600);
-          }, 1200);
-        } else {
-          // Variable timing - faster at start, slower near end
-          const delay = 30 + (progress * progress * 120);
+            // Step 2: Remove selected player from wheel
+            const updatedRemainingPlayers = remainingPlayers.filter(p => p !== player);
+            setUnassignedPlayers(updatedRemainingPlayers);
 
-          // Check if paused before scheduling next step
-          const checkAndContinue = () => {
-            if (isPausedRef.current) {
-              // Check again in 100ms if still paused
-              spinIntervalRef.current = setTimeout(checkAndContinue, 100);
-            } else {
-              doSpin();
-            }
-          };
+            // After removing a segment, adjust wheel so arrow points at CENTER of nearest segment
+            // This mimics Wheel of Names behavior
 
-          spinIntervalRef.current = setTimeout(checkAndContinue, delay);
+            // Calculate the new segment angle
+            const newSegmentAngle = 360 / updatedRemainingPlayers.length;
+
+            // Find which segment is currently closest to the arrow
+            const currentRotation = wheelRotation % 360;
+            const normalizedRotation = (360 - currentRotation) % 360;
+
+            // Find the nearest segment center
+            const nearestSegmentIndex = Math.round(normalizedRotation / newSegmentAngle) % updatedRemainingPlayers.length;
+
+            // Calculate rotation to put this segment's center at the arrow
+            const targetRotation = (360 - (nearestSegmentIndex * newSegmentAngle)) % 360;
+
+            // Adjust wheel to center on this segment
+            setCurrentSpinDuration(0);
+            setWheelRotation(targetRotation);
+
+            // Step 3: Wait 600ms, then clear highlight and start next spin
+            setTimeout(() => {
+              setCurrentSpinningPlayer(null);
+              setTimeout(spinForPlayer, 300);
+            }, 600);
+          }, 800);
         }
       };
 
-      doSpin();
+      // Start the highlight animation
+      updateHighlight();
     };
 
     spinForPlayer();
@@ -267,68 +302,66 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
 
   const drawTeams = drawMode === 'instant' ? instantDraw : wheelDraw;
 
-  const drawSide = useCallback(() => {
-    if (!isDrawn || isSideSpinning) return;
+  // Coin toss functions
+  const startCoinToss = useCallback(() => {
+    if (!isDrawn || coinTossPhase) return;
+    setCoinTossPhase('choose');
+  }, [isDrawn, coinTossPhase]);
 
-    setIsSideSpinning(true);
-    setAttackingTeam(null);
+  const handleTeam1Choice = useCallback((choice: 'heads' | 'tails') => {
+    setTeam1Choice(choice);
+    setCoinTossPhase('flipping');
 
-    let step = 0;
-    const totalSteps = 15 + Math.floor(Math.random() * 5); // Reduced from 30-40 to 15-20
-    const winner = Math.random() < 0.5 ? 1 : 2;
+    // Animate coin flip for 3-4 seconds
+    const flipDuration = 3000 + Math.floor(Math.random() * 1000);
 
-    const doStep = () => {
-      setSideHighlight(prev => prev === 1 ? 2 : 1);
-      step++;
+    // Determine result randomly
+    const result: 'heads' | 'tails' = Math.random() < 0.5 ? 'heads' : 'tails';
 
-      if (step >= totalSteps) {
-        // Ensure we land on winner
-        setSideHighlight(winner as 1 | 2);
+    setTimeout(() => {
+      setCoinResult(result);
 
-        // Dramatic pause before reveal
-        // Final reveal with confetti
-        setAttackingTeam(winner);
-        setIsSideSpinning(false);
+      // Determine winner
+      const winner = result === choice ? 1 : 2;
+      setCoinWinner(winner);
+      setCoinTossPhase('result');
 
-        // Triple confetti burst
-        setTimeout(() => {
-          const colors = winner === 1 ? ['#ff4655', '#ffffff'] : ['#4d9fff', '#ffffff'];
+      // Show confetti for winner
+      setTimeout(() => {
+        const colors = winner === 1 ? ['#ff4655', '#ffffff'] : ['#4d9fff', '#ffffff'];
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { x: 0.5, y: 0.6 },
+          colors: colors
+        });
+      }, 100);
+    }, flipDuration);
+  }, []);
 
-          // Center burst
-          confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { x: 0.5, y: 0.6 },
-            colors: colors
-          });
-          // Left burst
-          confetti({
-            particleCount: 50,
-            angle: 60,
-            spread: 55,
-            origin: { x: 0, y: 0.6 },
-            colors: colors
-          });
-          // Right burst
-          confetti({
-            particleCount: 50,
-            angle: 120,
-            spread: 55,
-            origin: { x: 1, y: 0.6 },
-            colors: colors
-          });
-        }, 100);
-      } else {
-        // Cubic ease-out for smoother deceleration
-        const progress = step / totalSteps;
-        const easeOut = 1 - Math.pow(1 - progress, 3);
-        const delay = 40 + (easeOut * 300); // Reduced from 60 + 500 to 40 + 300
-        setTimeout(doStep, delay);
-      }
-    };
+  const handleSideSelection = useCallback((side: 'attack' | 'defense') => {
+    if (!coinWinner) return;
 
-    doStep();
-  }, [isDrawn, isSideSpinning]);
+    // Set attacking team based on winner's choice
+    if (side === 'attack') {
+      setAttackingTeam(coinWinner);
+    } else {
+      setAttackingTeam(coinWinner === 1 ? 2 : 1);
+    }
+
+    setCoinTossPhase('complete');
+
+    // Confetti for side selection
+    setTimeout(() => {
+      const colors = coinWinner === 1 ? ['#ff4655', '#ffffff'] : ['#4d9fff', '#ffffff'];
+      confetti({
+        particleCount: 150,
+        spread: 90,
+        origin: { x: 0.5, y: 0.6 },
+        colors: colors
+      });
+    }, 100);
+  }, [coinWinner]);
 
   const resetAll = useCallback(() => {
     setPlayers([]);
@@ -339,15 +372,19 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
     setBulkInput('');
     setAssignedPlayers(new Map());
     setAttackingTeam(null);
+    setCoinTossPhase(null);
+    setTeam1Choice(null);
+    setCoinResult(null);
+    setCoinWinner(null);
     if (spinIntervalRef.current) {
-      clearInterval(spinIntervalRef.current);
+      clearTimeout(spinIntervalRef.current);
     }
   }, []);
 
   useEffect(() => {
     return () => {
       if (spinIntervalRef.current) {
-        clearInterval(spinIntervalRef.current);
+        clearTimeout(spinIntervalRef.current);
       }
     };
   }, []);
@@ -362,11 +399,6 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
         <p className="text-muted-foreground text-lg">
           Add up to {MAX_PLAYERS} players (5 per team)
         </p>
-        {players.length > 0 && (
-          <p className="text-sm text-muted-foreground">
-            💾 Player list auto-saved
-          </p>
-        )}
       </div>
 
       {/* Draw Mode Toggle */}
@@ -477,25 +509,28 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
                 )}
               </Button>
 
-              <div className="relative w-80 h-80">
+              <div className="relative w-96 h-96">
                 {/* Pause Overlay */}
                 {isPaused && (
-                  <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-full border-4 border-yellow-400 animate-pulse">
-                    <div className="text-center space-y-4">
-                      <div className="w-20 h-20 mx-auto bg-yellow-400 rounded-full flex items-center justify-center">
-                        <div className="flex gap-2">
-                          <div className="w-3 h-12 bg-black rounded"></div>
-                          <div className="w-3 h-12 bg-black rounded"></div>
-                        </div>
+                  <>
+                    {/* Pause overlay background */}
+                    <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm rounded-full border-4 border-yellow-400 animate-pulse" />
+
+                    {/* Pause symbol - centered with middle circle */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 flex items-center justify-center">
+                      <div className="flex gap-2 items-center justify-center">
+                        <div className="w-3 h-10 bg-yellow-400 rounded"></div>
+                        <div className="w-3 h-10 bg-yellow-400 rounded"></div>
                       </div>
-                      <p className="text-2xl font-bold valorant-title text-yellow-400 tracking-wider">
+                    </div>
+
+                    {/* Pause text - below the center */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-8 z-50 text-center" style={{ marginLeft: '2px' }}>
+                      <p className="text-xl font-bold valorant-title text-yellow-400 tracking-wider">
                         PAUSED
                       </p>
-                      <p className="text-sm text-muted-foreground">
-                        Click RESUME to continue
-                      </p>
                     </div>
-                  </div>
+                  </>
                 )}
 
                 {/* Spinning wheel */}
@@ -507,7 +542,9 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
                   viewBox="0 0 200 200"
                   style={{
                     transform: `rotate(${wheelRotation}deg)`,
-                    transition: 'transform 0.05s linear'
+                    transition: isSpinning && !isPaused
+                      ? `transform ${currentSpinDuration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`
+                      : 'none'
                   }}
                 >
                   {/* Wheel segments */}
@@ -600,19 +637,28 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
 
                 {/* Outer glow ring */}
                 <div className={cn(
-                  "absolute inset-0 rounded-full border-4 border-yellow-400/30 animate-pulse pointer-events-none transition-opacity duration-300",
+                  "absolute inset-0 rounded-full border-4 border-yellow-400/30 pointer-events-none transition-opacity duration-300",
+                  !isPaused && "animate-pulse",
                   isPaused && "opacity-30"
                 )}
                   style={{ transform: 'scale(1.05)' }} />
               </div>
 
               {/* Current selection indicator */}
-              {currentSpinningPlayer && !isPaused && (
-                <div className="text-center space-y-2 animate-pulse">
-                  <p className="text-sm text-muted-foreground uppercase tracking-wider">Selecting...</p>
-                  <p className="text-3xl text-yellow-400 font-bold valorant-title tracking-wider drop-shadow-[0_0_12px_rgba(250,204,21,0.6)]">
-                    {currentSpinningPlayer}
-                  </p>
+              {!isPaused && (
+                <div className="flex justify-center min-h-[60px] items-center">
+                  {currentSpinningPlayer ? (
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-yellow-400/20 blur-xl rounded-full"></div>
+                      <div className="relative bg-card/90 backdrop-blur-sm border border-yellow-400/50 rounded-lg px-6 py-3">
+                        <p className="text-3xl text-yellow-400 font-bold valorant-title tracking-wider">
+                          {currentSpinningPlayer}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-[60px]"></div>
+                  )}
                 </div>
               )}
             </>
@@ -749,29 +795,30 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
             <div className="space-y-3">
               <h3 className={cn(
                 'valorant-title text-lg tracking-wider text-center transition-all flex items-center justify-center gap-2',
-                attackingTeam === 1 ? 'text-orange-500' : 'text-primary'
+                attackingTeam === 1 ? 'text-orange-500' : attackingTeam === 2 ? 'text-cyan-400' : 'text-primary'
               )}>
                 Team 1 {attackingTeam === 1 && (
                   <span className="flex items-center gap-1">
-                    <Flame className="w-4 h-4 animate-pulse" />
                     (T)
+                  </span>
+                )}
+                {attackingTeam === 2 && (
+                  <span className="flex items-center gap-1">
+                    (CT)
                   </span>
                 )}
               </h3>
               <div className={cn(
                 'bg-card border rounded p-4 space-y-2 transition-all duration-300 relative overflow-hidden',
-                // Spinning state
-                isSideSpinning && sideHighlight === 1 && 'ring-4 ring-yellow-400 scale-105 shadow-2xl shadow-yellow-400/50',
-                isSideSpinning && sideHighlight !== 1 && 'opacity-50 scale-95',
-                // Winner state
-                !isSideSpinning && attackingTeam === 1 && 'ring-4 ring-orange-500 scale-105 shadow-2xl shadow-orange-500/50 animate-[wiggle_0.5s_ease-in-out]',
-                // Default state
-                attackingTeam === 1 ? 'border-orange-500/50' : 'border-primary/30'
+                // Winner state - Highlight the winner with their chosen side color
+                coinWinner === 1 && attackingTeam === 1 && 'ring-4 ring-orange-500 scale-105 shadow-2xl shadow-orange-500/50',
+                coinWinner === 1 && attackingTeam === 2 && 'ring-4 ring-cyan-400 scale-105 shadow-2xl shadow-cyan-400/50',
+                // Border state based on assigned side
+                attackingTeam === 1 ? 'border-orange-500/50' : attackingTeam === 2 ? 'border-cyan-400/50' : 'border-primary/30'
               )}>
                 {/* Side Badge */}
                 {attackingTeam === 1 && (
-                  <div className="absolute top-2 right-2 bg-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold valorant-title tracking-wider flex items-center gap-1 shadow-lg">
-                    <Flame className="w-3 h-3" />
+                  <div className="absolute top-2 right-2 bg-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold valorant-title tracking-wider shadow-lg">
                     ATTACK
                   </div>
                 )}
@@ -792,29 +839,30 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
             <div className="space-y-3">
               <h3 className={cn(
                 'valorant-title text-lg tracking-wider text-center transition-all flex items-center justify-center gap-2',
-                attackingTeam === 2 ? 'text-orange-500' : 'text-blue-400'
+                attackingTeam === 2 ? 'text-orange-500' : attackingTeam === 1 ? 'text-cyan-400' : 'text-blue-400'
               )}>
                 Team 2 {attackingTeam === 2 && (
                   <span className="flex items-center gap-1">
-                    <Flame className="w-4 h-4 animate-pulse" />
                     (T)
+                  </span>
+                )}
+                {attackingTeam === 1 && (
+                  <span className="flex items-center gap-1">
+                    (CT)
                   </span>
                 )}
               </h3>
               <div className={cn(
                 'bg-card border rounded p-4 space-y-2 transition-all duration-300 relative overflow-hidden',
-                // Spinning state
-                isSideSpinning && sideHighlight === 2 && 'ring-4 ring-yellow-400 scale-105 shadow-2xl shadow-yellow-400/50',
-                isSideSpinning && sideHighlight !== 2 && 'opacity-50 scale-95',
-                // Winner state
-                !isSideSpinning && attackingTeam === 2 && 'ring-4 ring-orange-500 scale-105 shadow-2xl shadow-orange-500/50 animate-[wiggle_0.5s_ease-in-out]',
-                // Default state
-                attackingTeam === 2 ? 'border-orange-500/50' : 'border-blue-500/30'
+                // Winner state - Highlight the winner with their chosen side color
+                coinWinner === 2 && attackingTeam === 2 && 'ring-4 ring-orange-500 scale-105 shadow-2xl shadow-orange-500/50',
+                coinWinner === 2 && attackingTeam === 1 && 'ring-4 ring-cyan-400 scale-105 shadow-2xl shadow-cyan-400/50',
+                // Border state based on assigned side
+                attackingTeam === 2 ? 'border-orange-500/50' : attackingTeam === 1 ? 'border-cyan-400/50' : 'border-blue-500/30'
               )}>
                 {/* Side Badge */}
                 {attackingTeam === 2 && (
-                  <div className="absolute top-2 right-2 bg-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold valorant-title tracking-wider flex items-center gap-1 shadow-lg">
-                    <Flame className="w-3 h-3" />
+                  <div className="absolute top-2 right-2 bg-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold valorant-title tracking-wider shadow-lg">
                     ATTACK
                   </div>
                 )}
@@ -836,63 +884,122 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
           {/* Side Selection */}
           <div className="text-center space-y-3">
             {/* Toggle for Attack/Defense */}
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <div className="inline-flex rounded-lg border border-border p-1 bg-card">
-                <button
-                  onClick={() => setSideDrawMode('attack')}
-                  className={cn(
-                    "px-4 py-1.5 rounded-md text-sm font-medium valorant-title tracking-wider transition-all flex items-center gap-1.5",
-                    sideDrawMode === 'attack'
-                      ? "bg-orange-500 text-black shadow-lg"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Flame className="w-3.5 h-3.5" />
-                  ATTACK (T)
-                </button>
-                <button
-                  onClick={() => setSideDrawMode('defense')}
-                  className={cn(
-                    "px-4 py-1.5 rounded-md text-sm font-medium valorant-title tracking-wider transition-all",
-                    sideDrawMode === 'defense'
-                      ? "bg-cyan-400 text-black shadow-lg"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  DEFENSE (CT)
-                </button>
+            {/* Coin Toss Button */}
+            {!coinTossPhase && (
+              <Button
+                onClick={startCoinToss}
+                variant="secondary"
+                className="valorant-clip text-base"
+              >
+                <Target className="w-4 h-4 mr-2" />
+                Coin Toss for Side
+              </Button>
+            )}
+
+            {/* Heads/Tails Selection */}
+            {coinTossPhase === 'choose' && (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                <p className="text-xl font-bold valorant-title text-center text-yellow-400">
+                  Team 1: Choose Heads or Tails?
+                </p>
+                <div className="flex gap-4 justify-center">
+                  <Button
+                    onClick={() => handleTeam1Choice('heads')}
+                    className="valorant-clip text-lg px-8 py-6 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 flex items-center gap-3 overflow-hidden"
+                  >
+                    <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+                      <img src="/heads.png" className="w-full h-full object-cover scale-150" alt="Heads" />
+                    </div>
+                    HEADS
+                  </Button>
+                  <Button
+                    onClick={() => handleTeam1Choice('tails')}
+                    className="valorant-clip text-lg px-8 py-6 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 flex items-center gap-3 overflow-hidden"
+                  >
+                    <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+                      <img src="/tails.png" className="w-full h-full object-cover scale-150" alt="Tails" />
+                    </div>
+                    TAILS
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
 
-            <Button
-              onClick={drawSide}
-              disabled={isSideSpinning}
-              variant="secondary"
-              className="valorant-clip text-base"
-            >
-              <Target className="w-4 h-4 mr-2" />
-              {isSideSpinning ? 'Drawing side...' : attackingTeam ? 'Redraw Side' : `Draw ${sideDrawMode === 'attack' ? 'Attacker' : 'Defender'} Side`}
-            </Button>
+            {/* Coin Flipping Animation */}
+            {coinTossPhase === 'flipping' && (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                <div className="text-center flex flex-col items-center justify-center">
+                  <div className="relative w-32 h-32 animate-coin-flip preserve-3d rounded-full">
+                    <div className="absolute inset-0 backface-hidden rounded-full overflow-hidden bg-white">
+                      <img src="/heads.png" className="w-full h-full object-cover scale-125" alt="Heads" />
+                    </div>
+                    <div className="absolute inset-0 backface-hidden rotate-x-180 rounded-full overflow-hidden bg-white">
+                      <img src="/tails.png" className="w-full h-full object-cover scale-125" alt="Tails" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold valorant-title text-yellow-400 mt-8 animate-pulse">
+                    Flipping...
+                  </p>
+                  <p className="text-muted-foreground mt-2">
+                    Team 1 chose: <span className="text-yellow-400 font-bold uppercase">{team1Choice}</span>
+                  </p>
+                </div>
+              </div>
+            )}
 
-            {attackingTeam && !isSideSpinning && (
-              <div className="text-muted-foreground text-base">
-                {sideDrawMode === 'attack' ? (
-                  <>
-                    <span className="text-orange-500 font-bold">Team {attackingTeam}</span> starts on{' '}
-                    <span className="text-orange-500 font-bold">Attack (T)</span>
-                    {' • '}
-                    <span className="text-cyan-400 font-bold">Team {attackingTeam === 1 ? 2 : 1}</span> starts on{' '}
-                    <span className="text-cyan-400 font-bold">Defense (CT)</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-cyan-400 font-bold">Team {attackingTeam === 1 ? 2 : 1}</span> starts on{' '}
-                    <span className="text-orange-500 font-bold">Attack (T)</span>
-                    {' • '}
-                    <span className="text-cyan-400 font-bold">Team {attackingTeam}</span> starts on{' '}
-                    <span className="text-cyan-400 font-bold">Defense (CT)</span>
-                  </>
-                )}
+            {/* Coin Result & Side Selection */}
+            {coinTossPhase === 'result' && (
+              <div className="space-y-6 animate-in fade-in duration-500">
+                <div className="text-center space-y-3 flex flex-col items-center">
+                  <div className="w-32 h-32 rounded-full overflow-hidden animate-[revealCard_0.5s_ease-out]">
+                    <img
+                      src={coinResult === 'heads' ? "/heads.png" : "/tails.png"}
+                      className="w-full h-full object-cover scale-125"
+                      alt={coinResult || ''}
+                    />
+                  </div>
+                  <p className="text-3xl font-bold valorant-title text-yellow-400 mt-4">
+                    Result: <span className="uppercase">{coinResult}</span>!
+                  </p>
+                  <p className="text-2xl font-bold valorant-title">
+                    <span className={coinWinner === 1 ? 'text-red-500' : 'text-blue-500'}>
+                      Team {coinWinner}
+                    </span> wins the toss!
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xl font-bold valorant-title text-center text-yellow-400">
+                    Team {coinWinner}: Choose your side
+                  </p>
+                  <div className="flex gap-4 justify-center">
+                    <Button
+                      onClick={() => handleSideSelection('attack')}
+                      className="valorant-clip text-lg px-8 py-6 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                    >
+                      ATTACK (T)
+                    </Button>
+                    <Button
+                      onClick={() => handleSideSelection('defense')}
+                      className="valorant-clip text-lg px-8 py-6 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-500 hover:to-blue-600"
+                    >
+                      DEFENSE (CT)
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Final Result Display */}
+            {coinTossPhase === 'complete' && attackingTeam && (
+              <div className="text-center text-lg animate-in fade-in duration-300">
+                <p className="text-muted-foreground">
+                  <span className="text-orange-500 font-bold">Team {attackingTeam}</span> starts on{' '}
+                  <span className="text-orange-500 font-bold">Attack (T)</span>
+                  {' • '}
+                  <span className="text-cyan-400 font-bold">Team {attackingTeam === 1 ? 2 : 1}</span> starts on{' '}
+                  <span className="text-cyan-400 font-bold">Defense (CT)</span>
+                </p>
               </div>
             )}
           </div>
