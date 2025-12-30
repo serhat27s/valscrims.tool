@@ -223,7 +223,7 @@ export const ValorantMapPicker = () => {
           {/* GitHub Link - Top Right */}
           <div className="absolute top-4 right-4">
             <a
-              href="https://github.com/serhat27s/map-picker-pro"
+              href="https://github.com/serhat27s/valscrims.tool"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-3 py-2 bg-card/80 border border-border rounded-lg hover:bg-card hover:border-primary/50 transition-all group"

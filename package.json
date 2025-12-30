@@ -1,6 +1,6 @@
 {
   "name": "valscrim-tools",
-  "description": "ValScrim.Tools - Professional map picker and team generator for VALORANT custom games",
+  "description": "ValScrim.Tools - Scrims tool for map picker and team generator for VALORANT custom games",
   "private": true,
   "version": "1.0.0",
   "type": "module",
