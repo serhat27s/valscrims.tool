@@ -406,7 +406,7 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
         <Button
           onClick={() => setDrawMode('instant')}
           variant={drawMode === 'instant' ? 'default' : 'secondary'}
-          className={cn('valorant-clip text-base', drawMode === 'instant' && 'bg-primary text-primary-foreground')}
+          className={cn('valorant-clip text-base', drawMode === 'instant' && 'bg-purple-600 hover:bg-purple-700 text-white')}
         >
           <Zap className="w-4 h-4 mr-2" />
           Instant Draw
@@ -773,7 +773,12 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
         <Button
           onClick={drawTeams}
           disabled={isSpinning}
-          className="w-full valorant-clip bg-primary hover:bg-primary/90 text-primary-foreground valorant-title text-lg py-6 tracking-wider"
+          className={cn(
+            "w-full valorant-clip text-primary-foreground valorant-title text-lg py-6 tracking-wider",
+            drawMode === 'instant'
+              ? "bg-purple-600 hover:bg-purple-700"
+              : "bg-primary hover:bg-primary/90"
+          )}
         >
           {drawMode === 'instant' ? <Zap className="w-5 h-5 mr-2" /> : <Shuffle className="w-5 h-5 mr-2" />}
           {isSpinning ? 'Drawing...' : isDrawn ? 'Redraw Teams' : 'Draw Teams'}

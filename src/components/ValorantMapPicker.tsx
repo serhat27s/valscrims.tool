@@ -106,7 +106,7 @@ export const ValorantMapPicker = () => {
     cycle();
   }, [availableMaps]);
 
-  const generateMaps = useCallback(() => {
+  const generateMaps = useCallback((instant = false) => {
     if (isAnimating) return;
 
     if (availableMaps.length < selectedCount) {
@@ -124,10 +124,6 @@ export const ValorantMapPicker = () => {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     const targetMaps = shuffled.slice(0, selectedCount);
-
-    setIsAnimating(true);
-    setSelectedMaps([]);
-    setRevealedMaps([]);
 
     const triggerConfetti = () => {
       const duration = 2000;
@@ -164,6 +160,17 @@ export const ValorantMapPicker = () => {
 
       frame();
     };
+
+    if (instant) {
+      setSelectedMaps(targetMaps);
+      setRevealedMaps(targetMaps);
+      triggerConfetti();
+      return;
+    }
+
+    setIsAnimating(true);
+    setSelectedMaps([]);
+    setRevealedMaps([]);
 
     const animateSequentially = (index: number) => {
       if (index >= targetMaps.length) {
@@ -229,13 +236,13 @@ export const ValorantMapPicker = () => {
           <div className="text-center space-y-4">
             {/* Title */}
             <h1 className="valorant-title text-6xl md:text-7xl tracking-wider">
-              <span className="text-muted-foreground/60">VALSCRIM</span>
-              <span className="text-primary drop-shadow-[0_0_20px_rgba(255,70,85,0.5)]">.TOOLS</span>
+              <span className="text-muted-foreground/60">VALSCRIMS</span>
+              <span className="text-primary drop-shadow-[0_0_20px_rgba(255,70,85,0.5)]">.TOOL</span>
             </h1>
 
             {/* Subtitle */}
             <p className="text-muted-foreground text-xl max-w-2xl mx-auto">
-              Professional scrim tools for map selection and team generation
+              Scrims tool for map selection and team generation
             </p>
 
             {/* Feature Pills */}
@@ -248,9 +255,9 @@ export const ValorantMapPicker = () => {
                 <Users className="w-4 h-4 text-blue-400" />
                 <span className="text-base font-medium text-blue-400">Team Generator</span>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 rounded-full">
-                <Zap className="w-4 h-4 text-purple-400" />
-                <span className="text-base font-medium text-purple-400">Instant Draw</span>
+              <div className="flex items-center gap-2 px-4 py-2 bg-purple-600/10 border border-purple-600/30 rounded-full">
+                <Zap className="w-4 h-4 text-purple-600" />
+                <span className="text-base font-medium text-purple-600">Instant Draw</span>
               </div>
             </div>
           </div>
@@ -306,9 +313,18 @@ export const ValorantMapPicker = () => {
 
                 <div className="flex gap-3">
                   <Button
-                    onClick={generateMaps}
+                    onClick={() => generateMaps(true)}
                     disabled={isAnimating}
-                    className="valorant-clip bg-primary hover:bg-primary/90 text-primary-foreground valorant-title text-lg px-8 py-5 tracking-wider disabled:opacity-50"
+                    className="valorant-clip bg-purple-600 hover:bg-purple-700 text-white valorant-title text-lg px-6 py-5 tracking-wider disabled:opacity-50"
+                  >
+                    <Zap className="w-5 h-5 mr-2" />
+                    Instant
+                  </Button>
+
+                  <Button
+                    onClick={() => generateMaps(false)}
+                    disabled={isAnimating}
+                    className="valorant-clip bg-primary hover:bg-primary/90 text-primary-foreground valorant-title text-lg px-6 py-5 tracking-wider disabled:opacity-50"
                   >
                     <Shuffle className={`w-5 h-5 mr-2 ${isAnimating ? 'animate-spin' : ''}`} />
                     {isAnimating ? 'Rolling...' : 'Generate'}
@@ -422,14 +438,13 @@ export const ValorantMapPicker = () => {
             Made for VALORANT custom games • Not affiliated with Riot Games
           </p>
           <p className="text-muted-foreground text-sm">
-            Created by{' '}
             <a
-              href="https://github.com/YOUR_GITHUB_USERNAME"
+              href="https://github.com/serhat27s"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline font-medium"
             >
-              @YOUR_GITHUB_USERNAME
+              @serhat27s
             </a>
           </p>
         </div>
