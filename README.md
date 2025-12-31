@@ -1,8 +1,14 @@
 # ValScrim.Tools
 
-![ValScrim Logo](public/logo.png)
 
-**ValScrim.Tools** is a scrims tool for map selection and team generation, designed for VALORANT custom games and tournaments.
+<p align="center">
+  <img src="https://i.gyazo.com/122ef6dee17010f948054bb527244619.png" width="700" />
+  <img src="https://i.gyazo.com/db27f79def966914207c62c7d30abe34.png" width="700" />
+</p>
+
+
+
+**ValScrim.Tools** is a scrims tool for map selection and team generation, designed for VALORANT custom games and tournaments. 
 
 ## Features
 
@@ -35,7 +41,7 @@ Built with modern web technologies:
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/valscrim-tools.git
+    git clone https://github.com/serhat27s/valscrim-tools.git
     cd valscrim-tools
     ```
 
