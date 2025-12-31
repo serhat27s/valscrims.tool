@@ -62,5 +62,10 @@ export const valorantMaps: ValorantMap[] = [
     id: 'abyss',
     name: 'Abyss',
     image: abyssImage
+  },
+  {
+    id: 'corrode',
+    name: 'Corrode',
+    image: 'https://media.valorant-api.com/maps/1c18ab1f-420d-0d8b-71d0-77ad3c439115/splash.png'
   }
 ];
