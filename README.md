@@ -2,7 +2,7 @@
 
 
 <p align="center">
-  <img src="https://i.gyazo.com/122ef6dee17010f948054bb527244619.png" width="700" />
+  <img src="https://i.gyazo.com/cef7f3fc4d5bdbbdbcb47c35d9caa55c.png" width="700" /> 
   <img src="https://i.gyazo.com/db27f79def966914207c62c7d30abe34.png" width="700" />
 </p>
 
