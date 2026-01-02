@@ -59,9 +59,16 @@ Built with modern web technologies:
 
 4.  Open http://localhost:8080 to view the app.
 
-## Contributing
+### Easy self-hosting
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+For a hassle-free experience, **just double-click `start-local.bat`** to launch the development server.
+
+**How it works:**
+- The batch file automatically runs `npm run dev` in the correct directory
+- No need to open terminals or use command-line tools
+- Works regardless of where you clone the repository
+- The dev server will start in a Command Prompt window
+
 
 ## License
 
