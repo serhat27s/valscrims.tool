@@ -57,10 +57,11 @@ Built with modern web technologies:
 
 4.  Open http://localhost:8080 to view the app.
 
-### Easy self-hosting
+## Easy self-hosting
 
 For a hassle-free experience, **just double-click `start-local.bat`** to launch the development server.
-Alternatively, in your IDE **right-click `start-local.bat`** and select **"Open in integrated terminal"**.
+> Alternatively, in your IDE **right-click `start-local.bat`** and select **"Open in integrated terminal"**.
+
 
 **How `start-local.bat` works:**
 - The batch file automatically runs `npm run dev` in the correct directory
