@@ -2,7 +2,7 @@
 
 
 <p align="center">
-  <img src="https://i.gyazo.com/cef7f3fc4d5bdbbdbcb47c35d9caa55c.png" width="700" /> 
+  <img src="https://i.gyazo.com/122ef6dee17010f948054bb527244619.png" width="700" />
   <img src="https://i.gyazo.com/db27f79def966914207c62c7d30abe34.png" width="700" />
 </p>
 
@@ -35,7 +35,7 @@ Built with modern web technologies:
 ### Prerequisites
 
 -   Node.js (v18 or higher)
--   npm or pnpm
+-   npm
 
 ### Installation
 
@@ -48,8 +48,6 @@ Built with modern web technologies:
 2.  Install dependencies:
     ```bash
     npm install
-    # or
-    pnpm install
     ```
 
 3.  Start the development server:
@@ -62,8 +60,9 @@ Built with modern web technologies:
 ### Easy self-hosting
 
 For a hassle-free experience, **just double-click `start-local.bat`** to launch the development server.
+Alternatively, in your IDE **right-click `start-local.bat`** and select **"Open in integrated terminal"**.
 
-**How it works:**
+**How `start-local.bat` works:**
 - The batch file automatically runs `npm run dev` in the correct directory
 - No need to open terminals or use command-line tools
 - Works regardless of where you clone the repository
