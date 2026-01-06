@@ -7,7 +7,7 @@ import { TeamDrawer } from './TeamDrawer';
 import { AnimatedBackground } from './AnimatedBackground';
 import { ClipboardButton } from './ClipboardButton';
 import { Button } from '@/components/ui/button';
-import { Shuffle, RotateCcw, Map, Users, Zap, Github } from 'lucide-react';
+import { Shuffle, RotateCcw, Map, Users, Zap, Github, Pause, Play } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -34,6 +34,8 @@ export const ValorantMapPicker = () => {
   const [cyclingMap, setCyclingMap] = useState<ValorantMap | null>(null);
   const [revealedMaps, setRevealedMaps] = useState<ValorantMap[]>([]);
   const animationRef = useRef<NodeJS.Timeout | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
 
   const { toast } = useToast();
 
@@ -81,6 +83,12 @@ export const ValorantMapPicker = () => {
     setCurrentMapIndex(mapIndex);
 
     const cycle = () => {
+      // If paused, keep checking until resumed
+      if (isPausedRef.current) {
+        animationRef.current = setTimeout(cycle, 50);
+        return;
+      }
+
       if (currentCycle >= totalCycles) {
         setCyclingMap(targetMaps[mapIndex]);
         setTimeout(() => {
@@ -171,6 +179,8 @@ export const ValorantMapPicker = () => {
     setIsAnimating(true);
     setSelectedMaps([]);
     setRevealedMaps([]);
+    setIsPaused(false);
+    isPausedRef.current = false;
 
     const animateSequentially = (index: number) => {
       if (index >= targetMaps.length) {
@@ -209,6 +219,14 @@ export const ValorantMapPicker = () => {
     setRevealedMaps([]);
     setExcludedMaps(new Set());
   }, [isAnimating]);
+
+  const togglePause = useCallback(() => {
+    setIsPaused(prev => {
+      const newValue = !prev;
+      isPausedRef.current = newValue;
+      return newValue;
+    });
+  }, []);
 
   const selectedMapIds = new Set(selectedMaps.map(m => m.id));
 
@@ -330,6 +348,26 @@ export const ValorantMapPicker = () => {
                     {isAnimating ? 'Rolling...' : 'Generate'}
                   </Button>
 
+                  {isAnimating && (
+                    <Button
+                      onClick={togglePause}
+                      variant={isPaused ? "default" : "secondary"}
+                      className={`valorant-clip valorant-title text-lg px-6 py-5 tracking-wider ${isPaused ? 'bg-yellow-500 hover:bg-yellow-600 text-black animate-pulse' : ''}`}
+                    >
+                      {isPaused ? (
+                        <>
+                          <Play className="w-5 h-5 mr-2" />
+                          Resume
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="w-5 h-5 mr-2" />
+                          Pause
+                        </>
+                      )}
+                    </Button>
+                  )}
+
                   {selectedMaps.length > 0 && !isAnimating && (
                     <Button onClick={resetSelection} variant="secondary" className="valorant-clip valorant-title text-lg px-6 py-5 tracking-wider">
                       <RotateCcw className="w-5 h-5 mr-2" />
@@ -350,11 +388,14 @@ export const ValorantMapPicker = () => {
                 {/* Cycling Map Display */}
                 {cyclingMap && (
                   <div className="flex justify-center mb-6">
-                    <div className="relative w-64 h-40 rounded-lg overflow-hidden border-2 border-primary shadow-lg shadow-primary/30 animate-pulse">
+                    <div className={`relative w-64 h-40 rounded-lg overflow-hidden border-2 shadow-lg transition-all duration-300 ${isPaused
+                      ? 'border-yellow-400/50 shadow-yellow-400/20 opacity-50'
+                      : 'border-primary shadow-primary/30 animate-pulse'
+                      }`}>
                       <img
                         src={cyclingMap.image}
                         alt={cyclingMap.name}
-                        className="w-full h-full object-cover"
+                        className={`w-full h-full object-cover transition-all duration-300 ${isPaused ? 'brightness-50' : ''}`}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
                       <div className="absolute bottom-3 left-0 right-0 text-center">
@@ -362,6 +403,11 @@ export const ValorantMapPicker = () => {
                           {cyclingMap.name}
                         </span>
                       </div>
+                      {isPaused && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <span className="valorant-title text-yellow-400 text-xl tracking-wider">PAUSED</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

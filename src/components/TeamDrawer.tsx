@@ -27,9 +27,21 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
   // Wheel animation state
   const [isSpinning, setIsSpinning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
   const [assignedPlayers, setAssignedPlayers] = useState<Map<string, 1 | 2>>(new Map());
   const [currentSpinDuration, setCurrentSpinDuration] = useState(3000); // Track current spin duration
   const spinIntervalRef = useRef<number | null>(null);
+
+  // Pause timing refs
+  const pauseStartTimeRef = useRef<number | null>(null);
+  const totalPausedTimeRef = useRef<number>(0);
+
+  // Wheel animation tracking refs
+  const wheelRef = useRef<SVGSVGElement>(null);
+  const pausedRotationRef = useRef<number | null>(null);
+  const spinStartRotationRef = useRef<number>(0);
+  const spinTargetRotationRef = useRef<number>(0);
+  const spinStartTimeRef = useRef<number>(0);
 
   // Coin toss state
   const [coinTossPhase, setCoinTossPhase] = useState<'choose' | 'flipping' | 'result' | 'complete' | null>(null);
@@ -149,12 +161,21 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
   const isPausedRef = useRef(false);
 
   const togglePause = useCallback(() => {
-    setIsPaused(prev => {
-      const newValue = !prev;
-      isPausedRef.current = newValue;
-      return newValue;
-    });
-  }, []);
+    if (isPaused) {
+      // Resuming
+      if (pauseStartTimeRef.current !== null) {
+        totalPausedTimeRef.current += Date.now() - pauseStartTimeRef.current;
+        pauseStartTimeRef.current = null;
+      }
+      setIsPaused(false);
+      isPausedRef.current = false;
+    } else {
+      // Pausing
+      pauseStartTimeRef.current = Date.now();
+      setIsPaused(true);
+      isPausedRef.current = true;
+    }
+  }, [isPaused]);
 
   const wheelDraw = useCallback(() => {
     if (players.length < 2 || isSpinning) return;
@@ -165,6 +186,10 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
     setTeam2([]);
     setIsDrawn(false);
     setAttackingTeam(null);
+    setIsPaused(false);
+    isPausedRef.current = false;
+    pauseStartTimeRef.current = null;
+    totalPausedTimeRef.current = 0;
     setWheelRotation(0); // Reset to 0 at the very start
 
     const shuffled = shuffleArray(players);
@@ -203,41 +228,37 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
       // Random spin duration between 3-5 seconds
       const spinDuration = 3000 + Math.floor(Math.random() * 2000);
 
-      // Set the spin duration and target rotation
+      // Set refs for this spin
       setCurrentSpinDuration(spinDuration);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setWheelRotation(targetRotation);
-        });
-      });
+      spinStartRotationRef.current = startRotation;
+      spinTargetRotationRef.current = targetRotation;
+      spinStartTimeRef.current = Date.now();
+      totalPausedTimeRef.current = 0;
 
-      // Update highlighted player during spin
-      const startTime = Date.now();
+      // JavaScript-driven animation loop
+      let animationFrameId: number;
 
-      const updateHighlight = () => {
+      const animate = () => {
+        // If paused, don't update rotation, just keep loop alive
         if (isPausedRef.current) {
-          // If paused, check again later
-          spinIntervalRef.current = setTimeout(updateHighlight, 50) as unknown as number;
+          animationFrameId = requestAnimationFrame(animate);
           return;
         }
 
-        const elapsed = Date.now() - startTime;
+        // Calculate elapsed time, accounting for any time spent paused
+        const now = Date.now();
+        const rawElapsed = now - spinStartTimeRef.current;
+        const elapsed = rawElapsed - totalPausedTimeRef.current;
         const progress = Math.min(elapsed / spinDuration, 1);
 
-        // Cubic bezier easing (0.17, 0.67, 0.12, 0.99) - similar to Wheel of Names
-        const easeOut = progress < 0.5
-          ? 4 * progress * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        // Cubic bezier easing - ease out
+        const easeOut = 1 - Math.pow(1 - progress, 3);
 
         const currentRotation = startRotation + (additionalRotation * easeOut);
-
-        // Calculate which player is at top
-        const normalizedRotation = (360 - (currentRotation % 360)) % 360;
-        const highlightIndex = Math.floor(normalizedRotation / segmentAngle) % remainingPlayers.length;
-        // setCurrentSpinningPlayer(remainingPlayers[highlightIndex]); // Disabled - only CSS wheel spins
+        setWheelRotation(currentRotation);
 
         if (progress < 1) {
-          spinIntervalRef.current = setTimeout(updateHighlight, 50) as unknown as number;
+          animationFrameId = requestAnimationFrame(animate);
         } else {
           // Spin complete - finalize selection
           const finalRotation = targetRotation % 360;
@@ -265,24 +286,14 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
             setUnassignedPlayers(updatedRemainingPlayers);
 
             // After removing a segment, adjust wheel so arrow points at CENTER of nearest segment
-            // This mimics Wheel of Names behavior
-
-            // Calculate the new segment angle
-            const newSegmentAngle = 360 / updatedRemainingPlayers.length;
-
-            // Find which segment is currently closest to the arrow
-            const currentRotation = wheelRotation % 360;
-            const normalizedRotation = (360 - currentRotation) % 360;
-
-            // Find the nearest segment center
-            const nearestSegmentIndex = Math.round(normalizedRotation / newSegmentAngle) % updatedRemainingPlayers.length;
-
-            // Calculate rotation to put this segment's center at the arrow
-            const targetRotation = (360 - (nearestSegmentIndex * newSegmentAngle)) % 360;
-
-            // Adjust wheel to center on this segment
-            setCurrentSpinDuration(0);
-            setWheelRotation(targetRotation);
+            if (updatedRemainingPlayers.length > 0) {
+              const newSegmentAngle = 360 / updatedRemainingPlayers.length;
+              const currentRot = targetRotation % 360;
+              const normalizedRot = (360 - currentRot) % 360;
+              const nearestSegmentIndex = Math.round(normalizedRot / newSegmentAngle) % updatedRemainingPlayers.length;
+              const adjustedRotation = (360 - (nearestSegmentIndex * newSegmentAngle)) % 360;
+              setWheelRotation(adjustedRotation);
+            }
 
             // Step 3: Wait 600ms, then clear highlight and start next spin
             setTimeout(() => {
@@ -293,12 +304,15 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
         }
       };
 
-      // Start the highlight animation
-      updateHighlight();
+      // Start the animation
+      animationFrameId = requestAnimationFrame(animate);
+
+      // Store cleanup reference
+      spinIntervalRef.current = animationFrameId as unknown as number;
     };
 
     spinForPlayer();
-  }, [players, isSpinning, onTeamsGenerated, triggerConfetti]);
+  }, [players, isSpinning, onTeamsGenerated, triggerConfetti, wheelRotation]);
 
   const drawTeams = drawMode === 'instant' ? instantDraw : wheelDraw;
 
@@ -535,16 +549,14 @@ export const TeamDrawer = ({ onTeamsGenerated }: TeamDrawerProps) => {
 
                 {/* Spinning wheel */}
                 <svg
+                  ref={wheelRef}
                   className={cn(
                     "absolute inset-0 w-full h-full transition-opacity duration-300",
                     isPaused && "opacity-30"
                   )}
                   viewBox="0 0 200 200"
                   style={{
-                    transform: `rotate(${wheelRotation}deg)`,
-                    transition: isSpinning && !isPaused
-                      ? `transform ${currentSpinDuration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`
-                      : 'none'
+                    transform: `rotate(${wheelRotation}deg)`
                   }}
                 >
                   {/* Wheel segments */}
